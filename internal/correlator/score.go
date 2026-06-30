@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/flipslidersand/otel-lens/internal/store"
+	"github.com/flipslidersand/otel-lens/internal/webhook"
 )
 
 // Candidate is a ranked correlation result.
@@ -146,11 +147,74 @@ func Score(ctx context.Context, st *store.ClickHouseStore, from, to time.Time, e
 		})
 	}
 
-	// 5. Sort by score descending
+	// 5. Factor in deploy event proximity
+	deployEvents, err := st.QueryDeployEvents(ctx, from.Add(-30*time.Minute), to)
+	if err == nil && len(deployEvents) > 0 {
+		for i, c := range candidates {
+			// Extract service name from description heuristically (best-effort)
+			svc := ""
+			for _, e := range deployEvents {
+				if containsService(c.Description, e.ServiceName) {
+					svc = e.ServiceName
+					break
+				}
+			}
+			boost := webhook.ProximityBoost(deployEvents, from, to, svc)
+			if boost > 0 {
+				candidates[i].Score = min1(c.Score + boost)
+				candidates[i].Evidence = append(candidates[i].Evidence,
+					fmt.Sprintf("deploy proximity boost: +%.2f (nearest deploy within window)", boost))
+			}
+		}
+
+		// Also add candidates for services that had a recent deploy
+		seen := map[string]bool{}
+		for _, e := range deployEvents {
+			if seen[e.ServiceName] {
+				continue
+			}
+			seen[e.ServiceName] = true
+			boost := webhook.ProximityBoost(deployEvents, from, to, e.ServiceName)
+			if boost < 0.05 {
+				continue
+			}
+			candidates = append(candidates, Candidate{
+				Description: fmt.Sprintf("deploy event: %s v%s by %s",
+					e.ServiceName, e.Version, e.Author),
+				Score: boost,
+				Evidence: []string{
+					fmt.Sprintf("deployed at %s (proximity boost: %.2f)", e.DeployedAt.Format(time.RFC3339), boost),
+				},
+			})
+		}
+	}
+
+	// 6. Sort by score descending
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].Score > candidates[j].Score
 	})
 	return candidates, nil
+}
+
+func containsService(desc, svc string) bool {
+	return len(svc) > 0 && len(desc) >= len(svc) &&
+		(desc[:len(svc)] == svc || findSubstring(desc, svc))
+}
+
+func findSubstring(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+func min1(v float64) float64 {
+	if v > 1.0 {
+		return 1.0
+	}
+	return v
 }
 
 // pearson computes the Pearson correlation coefficient of two equal-length slices.
