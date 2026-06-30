@@ -155,6 +155,50 @@ func (s *ClickHouseStore) QueryMetrics(ctx context.Context, from, to time.Time, 
 	return samples, rows.Err()
 }
 
+// ErrorRateBucket holds aggregated error rate for one time bucket.
+type ErrorRateBucket struct {
+	Bucket      time.Time
+	Total       uint64
+	Errors      uint64
+	ErrorRatePct float64 // 0–100
+}
+
+// QueryErrorRate returns per-minute error rate buckets in [from, to).
+// service = "" means all services.
+func (s *ClickHouseStore) QueryErrorRate(ctx context.Context, from, to time.Time, service string) ([]ErrorRateBucket, error) {
+	q := `SELECT
+	          toStartOfMinute(start_time)   AS bucket,
+	          count()                        AS total,
+	          countIf(status_code = 2)       AS errors
+	      FROM traces
+	      WHERE start_time >= ? AND start_time < ?`
+	args := []any{from, to}
+	if service != "" {
+		q += " AND service_name = ?"
+		args = append(args, service)
+	}
+	q += " GROUP BY bucket ORDER BY bucket"
+
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []ErrorRateBucket
+	for rows.Next() {
+		var b ErrorRateBucket
+		if err := rows.Scan(&b.Bucket, &b.Total, &b.Errors); err != nil {
+			return nil, err
+		}
+		if b.Total > 0 {
+			b.ErrorRatePct = float64(b.Errors) / float64(b.Total) * 100
+		}
+		buckets = append(buckets, b)
+	}
+	return buckets, rows.Err()
+}
+
 func (s *ClickHouseStore) Ping(ctx context.Context) error {
 	return s.conn.Ping(ctx)
 }
