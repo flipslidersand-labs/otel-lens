@@ -84,11 +84,62 @@ CREATE TABLE IF NOT EXISTS metrics (
   ORDER BY (metric_name, service_name, timestamp)
 `
 
+// DeployEvent records a deployment for correlation scoring.
+type DeployEvent struct {
+	DeployedAt  time.Time
+	ServiceName string
+	Version     string
+	Author      string
+}
+
+const ddlDeployEvents = `
+CREATE TABLE IF NOT EXISTS deploy_events (
+    deployed_at  DateTime64(9, 'UTC'),
+    service_name String,
+    version      String,
+    author       String
+) ENGINE = MergeTree()
+  ORDER BY (service_name, deployed_at)
+`
+
 func (s *ClickHouseStore) CreateSchema(ctx context.Context) error {
-	if err := s.conn.Exec(ctx, ddlTraces); err != nil {
-		return err
+	for _, ddl := range []string{ddlTraces, ddlMetrics, ddlDeployEvents} {
+		if err := s.conn.Exec(ctx, ddl); err != nil {
+			return err
+		}
 	}
-	return s.conn.Exec(ctx, ddlMetrics)
+	return nil
+}
+
+func (s *ClickHouseStore) InsertDeployEvent(ctx context.Context, e DeployEvent) error {
+	return s.conn.Exec(ctx,
+		`INSERT INTO deploy_events (deployed_at, service_name, version, author) VALUES (?,?,?,?)`,
+		e.DeployedAt, e.ServiceName, e.Version, e.Author,
+	)
+}
+
+// QueryDeployEvents returns deploy events in [from, to).
+func (s *ClickHouseStore) QueryDeployEvents(ctx context.Context, from, to time.Time) ([]DeployEvent, error) {
+	rows, err := s.conn.Query(ctx,
+		`SELECT deployed_at, service_name, version, author
+		 FROM deploy_events WHERE deployed_at >= ? AND deployed_at < ?
+		 ORDER BY deployed_at`,
+		from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []DeployEvent
+	for rows.Next() {
+		var e DeployEvent
+		if err := rows.Scan(&e.DeployedAt, &e.ServiceName, &e.Version, &e.Author); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
 }
 
 func (s *ClickHouseStore) InsertMetric(ctx context.Context, m MetricSample) error {

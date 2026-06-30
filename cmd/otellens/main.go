@@ -13,6 +13,7 @@ import (
 	"github.com/flipslidersand/otel-lens/internal/correlator"
 	"github.com/flipslidersand/otel-lens/internal/receiver"
 	"github.com/flipslidersand/otel-lens/internal/store"
+	"github.com/flipslidersand/otel-lens/internal/webhook"
 )
 
 func main() {
@@ -54,11 +55,16 @@ func serveCmd() *cobra.Command {
 				return fmt.Errorf("create schema: %w", err)
 			}
 
+			webhookAddr, _ := cmd.Flags().GetString("webhook-addr")
+			wh := webhook.New(webhookAddr, st, logger)
+			webhook.StartBackground(ctx, wh)
+
 			return receiver.Serve(grpcAddr, st, logger)
 		},
 	}
 	cmd.Flags().String("clickhouse", "localhost:9000", "ClickHouse address")
 	cmd.Flags().String("addr", ":4317", "OTLP gRPC listen address")
+	cmd.Flags().String("webhook-addr", ":8080", "HTTP webhook listen address")
 	return cmd
 }
 
