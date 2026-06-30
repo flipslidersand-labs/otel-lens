@@ -20,7 +20,7 @@ func main() {
 		Use:   "otellens",
 		Short: "OpenTelemetry signal correlation engine",
 	}
-	root.AddCommand(serveCmd(), statsCmd(), correlateCmd())
+	root.AddCommand(serveCmd(), statsCmd(), timeseriesCmd(), correlateCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -128,6 +128,89 @@ func statsCmd() *cobra.Command {
 	cmd.Flags().String("to", "", "end time (RFC3339, default: now)")
 	cmd.Flags().Duration("window", 5*time.Minute, "look-back window when --from is omitted")
 	return cmd
+}
+
+func timeseriesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "timeseries",
+		Short: "Show per-minute error rate time series",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			chAddr, _ := cmd.Flags().GetString("clickhouse")
+			fromStr, _ := cmd.Flags().GetString("from")
+			toStr, _ := cmd.Flags().GetString("to")
+			window, _ := cmd.Flags().GetDuration("window")
+			service, _ := cmd.Flags().GetString("service")
+
+			var from, to time.Time
+			if fromStr != "" {
+				var err error
+				from, err = time.Parse(time.RFC3339, fromStr)
+				if err != nil {
+					return fmt.Errorf("--from: %w", err)
+				}
+			} else {
+				from = time.Now().UTC().Add(-window)
+			}
+			if toStr != "" {
+				var err error
+				to, err = time.Parse(time.RFC3339, toStr)
+				if err != nil {
+					return fmt.Errorf("--to: %w", err)
+				}
+			} else {
+				to = time.Now().UTC()
+			}
+
+			st, err := store.New(chAddr)
+			if err != nil {
+				return fmt.Errorf("clickhouse connect: %w", err)
+			}
+			defer st.Close() //nolint:errcheck
+
+			buckets, err := st.QueryErrorRate(context.Background(), from, to, service)
+			if err != nil {
+				return err
+			}
+			if len(buckets) == 0 {
+				fmt.Println("no data in window")
+				return nil
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "TIME(UTC)\tTOTAL\tERRORS\tERROR%\tBAR")
+			for _, b := range buckets {
+				bar := errorBar(b.ErrorRatePct, 20)
+				fmt.Fprintf(w, "%s\t%d\t%d\t%.1f%%\t%s\n",
+					b.Bucket.Format("2006-01-02 15:04"),
+					b.Total, b.Errors, b.ErrorRatePct, bar)
+			}
+			w.Flush()
+			return nil
+		},
+	}
+	cmd.Flags().String("clickhouse", "localhost:9000", "ClickHouse address")
+	cmd.Flags().String("from", "", "start time (RFC3339)")
+	cmd.Flags().String("to", "", "end time (RFC3339)")
+	cmd.Flags().Duration("window", 30*time.Minute, "look-back window when --from is omitted")
+	cmd.Flags().String("service", "", "filter by service name (empty = all)")
+	return cmd
+}
+
+// errorBar renders a simple ASCII bar scaled to maxWidth chars.
+func errorBar(pct float64, maxWidth int) string {
+	filled := int(pct / 100 * float64(maxWidth))
+	if filled > maxWidth {
+		filled = maxWidth
+	}
+	bar := make([]byte, maxWidth)
+	for i := range bar {
+		if i < filled {
+			bar[i] = '#'
+		} else {
+			bar[i] = '.'
+		}
+	}
+	return string(bar)
 }
 
 func correlateCmd() *cobra.Command {
