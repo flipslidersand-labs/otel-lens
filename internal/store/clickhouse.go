@@ -52,10 +52,6 @@ CREATE TABLE IF NOT EXISTS traces (
   ORDER BY (service_name, start_time)
 `
 
-func (s *ClickHouseStore) CreateSchema(ctx context.Context) error {
-	return s.conn.Exec(ctx, ddlTraces)
-}
-
 func (s *ClickHouseStore) InsertSpan(ctx context.Context, span Span) error {
 	return s.conn.Exec(ctx,
 		`INSERT INTO traces
@@ -66,6 +62,40 @@ func (s *ClickHouseStore) InsertSpan(ctx context.Context, span Span) error {
 		span.ServiceName, span.Operation,
 		span.StartTime, span.EndTime,
 		span.DurationMs, span.StatusCode, span.Attributes,
+	)
+}
+
+type MetricSample struct {
+	Name        string
+	ServiceName string
+	Timestamp   time.Time
+	Value       float64
+	Labels      map[string]string
+}
+
+const ddlMetrics = `
+CREATE TABLE IF NOT EXISTS metrics (
+    metric_name  String,
+    service_name String,
+    timestamp    DateTime64(9, 'UTC'),
+    value        Float64,
+    labels       Map(String, String)
+) ENGINE = MergeTree()
+  ORDER BY (metric_name, service_name, timestamp)
+`
+
+func (s *ClickHouseStore) CreateSchema(ctx context.Context) error {
+	if err := s.conn.Exec(ctx, ddlTraces); err != nil {
+		return err
+	}
+	return s.conn.Exec(ctx, ddlMetrics)
+}
+
+func (s *ClickHouseStore) InsertMetric(ctx context.Context, m MetricSample) error {
+	return s.conn.Exec(ctx,
+		`INSERT INTO metrics (metric_name, service_name, timestamp, value, labels)
+		 VALUES (?,?,?,?,?)`,
+		m.Name, m.ServiceName, m.Timestamp, m.Value, m.Labels,
 	)
 }
 
