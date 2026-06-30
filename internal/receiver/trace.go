@@ -41,6 +41,7 @@ func Serve(addr string, st *store.ClickHouseStore, logger *zap.Logger) error {
 	}
 	srv := grpc.NewServer()
 	collectortrace.RegisterTraceServiceServer(srv, &traceServer{st: st, logger: logger})
+	RegisterMetricsService(srv, st, logger)
 	logger.Info("OTLP gRPC receiver listening", zap.String("addr", addr))
 	return srv.Serve(lis)
 }
