@@ -199,6 +199,43 @@ func (s *ClickHouseStore) QueryErrorRate(ctx context.Context, from, to time.Time
 	return buckets, rows.Err()
 }
 
+// MetricBucket is an averaged metric value for one minute bucket.
+type MetricBucket struct {
+	Bucket      time.Time
+	MetricName  string
+	ServiceName string
+	AvgValue    float64
+}
+
+// QueryMetricTimeseries returns per-minute averaged values for each metric in [from, to).
+func (s *ClickHouseStore) QueryMetricTimeseries(ctx context.Context, from, to time.Time) ([]MetricBucket, error) {
+	q := `SELECT
+	          toStartOfMinute(timestamp) AS bucket,
+	          metric_name,
+	          service_name,
+	          avg(value) AS avg_value
+	      FROM metrics
+	      WHERE timestamp >= ? AND timestamp < ?
+	      GROUP BY bucket, metric_name, service_name
+	      ORDER BY bucket`
+
+	rows, err := s.conn.Query(ctx, q, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []MetricBucket
+	for rows.Next() {
+		var b MetricBucket
+		if err := rows.Scan(&b.Bucket, &b.MetricName, &b.ServiceName, &b.AvgValue); err != nil {
+			return nil, err
+		}
+		buckets = append(buckets, b)
+	}
+	return buckets, rows.Err()
+}
+
 func (s *ClickHouseStore) Ping(ctx context.Context) error {
 	return s.conn.Ping(ctx)
 }

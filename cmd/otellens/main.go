@@ -214,12 +214,75 @@ func errorBar(pct float64, maxWidth int) string {
 }
 
 func correlateCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "correlate",
-		Short: "Find correlation candidates",
+		Short: "Rank correlation candidates against error rate",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("correlate — not yet implemented (Phase 5)")
+			chAddr, _ := cmd.Flags().GetString("clickhouse")
+			fromStr, _ := cmd.Flags().GetString("from")
+			toStr, _ := cmd.Flags().GetString("to")
+			window, _ := cmd.Flags().GetDuration("window")
+			threshold, _ := cmd.Flags().GetFloat64("threshold")
+			topN, _ := cmd.Flags().GetInt("top")
+
+			var from, to time.Time
+			if fromStr != "" {
+				var err error
+				from, err = time.Parse(time.RFC3339, fromStr)
+				if err != nil {
+					return fmt.Errorf("--from: %w", err)
+				}
+			} else {
+				from = time.Now().UTC().Add(-window)
+			}
+			if toStr != "" {
+				var err error
+				to, err = time.Parse(time.RFC3339, toStr)
+				if err != nil {
+					return fmt.Errorf("--to: %w", err)
+				}
+			} else {
+				to = time.Now().UTC()
+			}
+
+			st, err := store.New(chAddr)
+			if err != nil {
+				return fmt.Errorf("clickhouse connect: %w", err)
+			}
+			defer st.Close() //nolint:errcheck
+
+			candidates, err := correlator.Score(context.Background(), st, from, to, threshold)
+			if err != nil {
+				return err
+			}
+			if len(candidates) == 0 {
+				fmt.Println("no correlation candidates found")
+				return nil
+			}
+			if topN > 0 && len(candidates) > topN {
+				candidates = candidates[:topN]
+			}
+
+			fmt.Printf("Correlation candidates [%s → %s]  threshold=%.0f%%\n\n",
+				from.Format("15:04"), to.Format("15:04 UTC"), threshold)
+			for i, c := range candidates {
+				fmt.Printf("%d. [%.2f] %s\n", i+1, c.Score, c.Description)
+				for _, e := range c.Evidence {
+					fmt.Printf("      • %s\n", e)
+				}
+				if len(c.TraceIDs) > 0 {
+					fmt.Printf("      traces: %v\n", c.TraceIDs)
+				}
+				fmt.Println()
+			}
 			return nil
 		},
 	}
+	cmd.Flags().String("clickhouse", "localhost:9000", "ClickHouse address")
+	cmd.Flags().String("from", "", "start time (RFC3339)")
+	cmd.Flags().String("to", "", "end time (RFC3339)")
+	cmd.Flags().Duration("window", 5*time.Minute, "look-back window when --from is omitted")
+	cmd.Flags().Float64("threshold", 10.0, "minimum error rate %% to include a service candidate")
+	cmd.Flags().Int("top", 10, "max candidates to show")
+	return cmd
 }
