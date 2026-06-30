@@ -99,6 +99,62 @@ func (s *ClickHouseStore) InsertMetric(ctx context.Context, m MetricSample) erro
 	)
 }
 
+// QueryTraces returns spans in [from, to) for a service (empty = all services).
+func (s *ClickHouseStore) QueryTraces(ctx context.Context, from, to time.Time, service string) ([]Span, error) {
+	q := `SELECT trace_id, span_id, parent_span_id, service_name, operation,
+	             start_time, end_time, duration_ms, status_code, attributes
+	      FROM traces
+	      WHERE start_time >= ? AND start_time < ?`
+	args := []any{from, to}
+	if service != "" {
+		q += " AND service_name = ?"
+		args = append(args, service)
+	}
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var spans []Span
+	for rows.Next() {
+		var sp Span
+		if err := rows.Scan(&sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.ServiceName,
+			&sp.Operation, &sp.StartTime, &sp.EndTime, &sp.DurationMs, &sp.StatusCode, &sp.Attributes); err != nil {
+			return nil, err
+		}
+		spans = append(spans, sp)
+	}
+	return spans, rows.Err()
+}
+
+// QueryMetrics returns metric samples in [from, to) for a metric name (empty = all).
+func (s *ClickHouseStore) QueryMetrics(ctx context.Context, from, to time.Time, metricName string) ([]MetricSample, error) {
+	q := `SELECT metric_name, service_name, timestamp, value, labels
+	      FROM metrics
+	      WHERE timestamp >= ? AND timestamp < ?`
+	args := []any{from, to}
+	if metricName != "" {
+		q += " AND metric_name = ?"
+		args = append(args, metricName)
+	}
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var samples []MetricSample
+	for rows.Next() {
+		var m MetricSample
+		if err := rows.Scan(&m.Name, &m.ServiceName, &m.Timestamp, &m.Value, &m.Labels); err != nil {
+			return nil, err
+		}
+		samples = append(samples, m)
+	}
+	return samples, rows.Err()
+}
+
 func (s *ClickHouseStore) Ping(ctx context.Context) error {
 	return s.conn.Ping(ctx)
 }
