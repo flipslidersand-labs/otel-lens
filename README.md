@@ -1,41 +1,33 @@
 # otel-lens
 
-> 🟡 **Scaffold Phase** — 基本設計と MVP 実装準備中
+OpenTelemetry signal correlation engine — connects distributed traces, metrics, and logs for automated root-cause diagnosis (Go + ClickHouse).
 
-OpenTelemetry data correlation engine for distributed tracing analysis and root-cause diagnosis
+> 🟡 **Scaffold Phase** — Design in progress, MVP implementation starting Q3 2026
 
-## ステータス
+## Status
 
-| 項目 | 状態 |
+| Item | State |
 |------|------|
-| **フェーズ** | Scaffold |
-| **実装予定** | 2026-Q3 MVP開始 |
-| **テスト** | 未実装 |
-| **ドキュメント** | 企画中 |
+| Phase | Scaffold |
+| MVP Target | Q3 2026 |
+| Tests | Planned |
+| Docs | Planned |
 
-## 技術スタック
+## Planned Tech Stack
 
-- **言語:** TBD
-- **ビルドツール:** TBD
-- **最終更新:** 2026-07-01
+- **Language:** Go
+- **Signals:** OpenTelemetry traces / metrics / logs
+- **Backend:** ClickHouse
 
-## 実装ロードマップ
+## Roadmap
 
-1. **Phase 1 (Q3 2026):** 基本設計 + MVP スケルトン
-2. **Phase 2 (Q4 2026):** コア機能実装 + テスト
-3. **Phase 3 (Q1 2027):** パフォーマンス最適化 + ドキュメント完成
-4. **Phase 4 (Q2 2027):** 本番デプロイ
+1. **Phase 1 (Q3 2026)** — OTLP ingestion + storage layer
+2. **Phase 2 (Q4 2026)** — Cross-signal correlation engine
+3. **Phase 3 (Q1 2027)** — Root-cause scoring + alerting
+4. **Phase 4 (Q2 2027)** — Dashboard + production deployment
 
-## 参考資料
+## Notes
 
-- [dev-nodee-infrastructure CLAUDE.md](https://github.com/flipslidersand/dev-nodee-infrastructure/blob/master/CLAUDE.md) — 詳細な実装方針
-- [GitHub Issues](https://github.com/flipslidersand/dev-nodee-infrastructure/issues) — 実装計画・進捗
+- API and design subject to change during scaffold phase
+- No test coverage yet — quality guarantees begin at Phase 2
 
-## 注意事項
-
-- **開発中**: API/設計は予告なく変更される可能性があります
-- **テスト未実装**: 本格実装まで品質保証していません
-
----
-
-詳細な実装計画は [GitHub Issues](https://github.com/flipslidersand/dev-nodee-infrastructure/issues) を参照してください。
