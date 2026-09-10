@@ -208,9 +208,9 @@ func (s *ClickHouseStore) QueryMetrics(ctx context.Context, from, to time.Time, 
 
 // ErrorRateBucket holds aggregated error rate for one time bucket.
 type ErrorRateBucket struct {
-	Bucket      time.Time
-	Total       uint64
-	Errors      uint64
+	Bucket       time.Time
+	Total        uint64
+	Errors       uint64
 	ErrorRatePct float64 // 0–100
 }
 

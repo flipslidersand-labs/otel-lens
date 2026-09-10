@@ -19,9 +19,9 @@ type SignalWindow struct {
 
 // ServiceSummary aggregates trace + metric data per service within a window.
 type ServiceSummary struct {
-	ServiceName  string
-	SpanCount    int
-	ErrorCount   int
+	ServiceName   string
+	SpanCount     int
+	ErrorCount    int
 	AvgDurationMs float64
 	// Metrics keyed by metric name → latest value in the window
 	MetricValues map[string]float64

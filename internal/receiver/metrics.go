@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
