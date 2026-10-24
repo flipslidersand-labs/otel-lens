@@ -33,6 +33,13 @@ OpenTelemetry signal correlation engine for distributed tracing analysis and roo
 - **In Development / 開発中**: API/design may change without notice / API・設計は予告なく変更される可能性があります
 - **No tests yet / テスト未実装**: Quality not guaranteed until Phase 2 / 本格実装まで品質保証していません
 
+## CI
+
+- `go vet` / `go build` / `go test` run via the reusable workflow `flipslidersand-labs/qa-workflows` `go-test.yml` (`.github/workflows/ci.yml`), plus gitleaks.
+  CI は qa-workflows の reusable workflow `go-test.yml` で vet/build/test を実行し、gitleaks も走ります。
+- **Required setting / 必須設定:** the runner is selected by the Actions variable `GATE_RUNNER` (set at org level). Forks must define `GATE_RUNNER` themselves.
+  runner は Actions 変数 `GATE_RUNNER`(org で設定)で選びます。fork では各自 `GATE_RUNNER` を設定してください。
+
 ---
 
 Track progress in [GitHub Issues](https://github.com/flipslidersand/otel-lens/issues).
