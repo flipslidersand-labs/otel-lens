@@ -52,12 +52,26 @@ CREATE TABLE IF NOT EXISTS traces (
   ORDER BY (service_name, start_time)
 `
 
+// insertRow sends one row via the native batch protocol. A "?"-bound
+// time.Time via Exec is rendered as a seconds-precision literal, which
+// truncates DateTime64 sub-second values; Append keeps full precision.
+func (s *ClickHouseStore) insertRow(ctx context.Context, query string, args ...any) error {
+	batch, err := s.conn.PrepareBatch(ctx, query)
+	if err != nil {
+		return err
+	}
+	if err := batch.Append(args...); err != nil {
+		_ = batch.Abort()
+		return err
+	}
+	return batch.Send()
+}
+
 func (s *ClickHouseStore) InsertSpan(ctx context.Context, span Span) error {
-	return s.conn.Exec(ctx,
+	return s.insertRow(ctx,
 		`INSERT INTO traces
 		 (trace_id, span_id, parent_span_id, service_name, operation,
-		  start_time, end_time, duration_ms, status_code, attributes)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		  start_time, end_time, duration_ms, status_code, attributes)`,
 		span.TraceID, span.SpanID, span.ParentSpanID,
 		span.ServiceName, span.Operation,
 		span.StartTime, span.EndTime,
@@ -112,8 +126,8 @@ func (s *ClickHouseStore) CreateSchema(ctx context.Context) error {
 }
 
 func (s *ClickHouseStore) InsertDeployEvent(ctx context.Context, e DeployEvent) error {
-	return s.conn.Exec(ctx,
-		`INSERT INTO deploy_events (deployed_at, service_name, version, author) VALUES (?,?,?,?)`,
+	return s.insertRow(ctx,
+		`INSERT INTO deploy_events (deployed_at, service_name, version, author)`,
 		e.DeployedAt, e.ServiceName, e.Version, e.Author,
 	)
 }
@@ -143,9 +157,8 @@ func (s *ClickHouseStore) QueryDeployEvents(ctx context.Context, from, to time.T
 }
 
 func (s *ClickHouseStore) InsertMetric(ctx context.Context, m MetricSample) error {
-	return s.conn.Exec(ctx,
-		`INSERT INTO metrics (metric_name, service_name, timestamp, value, labels)
-		 VALUES (?,?,?,?,?)`,
+	return s.insertRow(ctx,
+		`INSERT INTO metrics (metric_name, service_name, timestamp, value, labels)`,
 		m.Name, m.ServiceName, m.Timestamp, m.Value, m.Labels,
 	)
 }
