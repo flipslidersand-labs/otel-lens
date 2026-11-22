@@ -1,5 +1,7 @@
 # otel-lens
 
+Release type: `service`
+
 OpenTelemetry signal correlation engine for distributed tracing analysis and root-cause diagnosis (Go + ClickHouse).
 
 分散トレーシング分析・根本原因診断のための OpenTelemetry シグナル相関エンジン。
